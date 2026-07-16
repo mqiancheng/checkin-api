@@ -9,7 +9,9 @@ services:
     environment:
       # CFBypass 端点(server) 与 checkin-api 内部调用(executor) 共用此密码，
       # 修改后容器内两端自动同步；远程青龙脚本请用同名密码的 BYPASS_PASSWORD 变量保持一致
-      - PASSWORD=gua12345
+      # 真实密码请放在仓库外 .env 文件中（已被 gitignore），例如 .env 里写 CFB_PASSWORD=你的强密码
+      # 下面用 ${CFB_PASSWORD} 从 .env 注入；未设置时回退到 gua12345（请务必改成自定义强密码）
+      - PASSWORD=${CFB_PASSWORD:-gua12345}
     restart: unless-stopped
     # 每次 up 都拉取最新镜像（手动构建后更新用）
     pull_policy: always
