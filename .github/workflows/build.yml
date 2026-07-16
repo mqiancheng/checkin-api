@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '镜像标签（默认 test，避免误覆盖生产 latest）'
+        description: '镜像标签（默认 latest，用于生产环境）'
         required: false
-        default: 'test'
+        default: 'latest'
 
 permissions:
   contents: read

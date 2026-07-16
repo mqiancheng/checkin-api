@@ -130,7 +130,7 @@ def _bypass_host() -> str:
     """返回 CFBypass 端点 host 基础（scheme://host:port，不含密码与路径）。
 
     用户只需在全局设置填 host:port（如 http://192.168.6.100:10001），
-    密码统一用环境变量 CFB_PASSWORD（默认 mnqswhai）拼接，
+    密码统一用环境变量 CFB_PASSWORD（默认 test1234）拼接，
     避免只填基础地址导致缺密码段 / 缺 /cookies 路径而 404。
     """
     db = SessionLocal()
