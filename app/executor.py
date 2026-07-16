@@ -476,8 +476,8 @@ def _send_http(task, params, headers, body, stage=None) -> tuple[int, bytes]:
     """HTTP 模式发送请求，必要时自动调用 cf_bypass 获取 cf_clearance 重试。
 
     cf_bypass 三档：
-      auto -> 仅当被 CF 拦截时才尝试（默认，最省资源）
-      on   -> 强制注入 cf_clearance（即便未被拦，先确保有 clearance）
+      auto -> 仅当被 CF 拦截时才尝试（默认，最省资源，优先用缓存）
+      on   -> 每次都强制调用 cfbypass 获取全新 cf_clearance（忽略缓存、不先发请求）
       off  -> 完全不调用 bypass
     """
     def _stage(m):
@@ -514,10 +514,26 @@ def _send_http(task, params, headers, body, stage=None) -> tuple[int, bytes]:
         _stage("HTTP 模式：直接发起请求（CF Bypass 关闭）")
         return _send(task, params, headers, body)
 
+    if mode == "on":
+        # 强制模式：每次都直接调 cfbypass 拿全新 cf_clearance，跳过缓存、不先发请求
+        _stage("HTTP 模式：强制调用 bypass 服务获取全新 cf_clearance（忽略缓存）")
+        cl = _get_clearance(task.url, force=True)
+        if not cl:
+            _stage("未能获取 cf_clearance（bypass 服务不可用或未配置），返回原始响应")
+            return _send(task, params, headers, body)
+        retry_headers = dict(headers)
+        retry_headers["Cookie"] = _merge_cookie(
+            retry_headers.get("Cookie", ""), {"cf_clearance": cl["cf_clearance"]}
+        )
+        if cl.get("user_agent"):
+            retry_headers["user-agent"] = cl["user_agent"]
+        _stage("注入全新 cf_clearance 后发送")
+        return _send(task, params, retry_headers, body)
+
+    # auto 模式：先正常发一次，被拦再调 bypass
     _stage("HTTP 模式：发起请求")
-    # 先正常发一次
     status_code, raw_bytes = _send(task, params, headers, body)
-    if mode == "auto" and not _is_blocked(status_code, raw_bytes):
+    if not _is_blocked(status_code, raw_bytes):
         return status_code, raw_bytes
 
     _stage("请求被 Cloudflare 拦截或需 clearance，调用 bypass 服务获取 cf_clearance")

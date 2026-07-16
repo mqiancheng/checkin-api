@@ -94,7 +94,7 @@ docker compose up -d
 - 镜像已包含 Firefox 系统依赖，构建时会下载 camoufox 内置 Firefox（约 +150MB）。
 
 ### CF Bypass（普通 JS 盾站点）
-在「全局设置」填写 NAS 上 CloudflareBypassForScraping 服务的地址（如 `http://192.168.6.100:10000/<你的CFB密码>/cookies`）。
+在「全局设置」填写 NAS 上 CloudflareBypassForScraping 服务的地址（如 `http://192.168.1.1:10000/<你的CFB密码>/cookies`）。
 - `auto`（默认）：仅当请求被 CF 拦截时才调用，按域名缓存 `cf_clearance`（默认 12h），缓存失效自动刷新重试。
 - `on`：强制注入 clearance。
 - `off`：完全不调用。
