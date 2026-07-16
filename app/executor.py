@@ -93,7 +93,8 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
         setting = db.query(Setting).first()
         bypass_url = (setting.bypass_url or "").strip() if setting else ""
         # 统一用 host 基础 + 环境变量密码拼接，避免裸用基础地址导致缺 /cookies 路径
-        cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
+        # 密码优先取 PASSWORD（与 CFBypass server 同一变量），兼容旧 CFB_PASSWORD，默认 gua12345
+        cfb_password = os.environ.get("PASSWORD") or os.environ.get("CFB_PASSWORD") or "gua12345"
         if not bypass_url:
             # 合并模式：未配置外部 bypass 时，默认自调容器内 CFBypass 端点
             bypass_url = f"http://127.0.0.1:10000/{cfb_password}/cookies"
@@ -161,7 +162,7 @@ def _get_turnstile(url: str) -> dict | None:
     返回 {"cf_clearance": str, "user_agent": str, "turnstile_token": str} 或 None。
     """
     domain = urlparse(url).netloc
-    cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
+    cfb_password = os.environ.get("PASSWORD") or os.environ.get("CFB_PASSWORD") or "gua12345"
     turnstile_url = f"{_bypass_host()}/{cfb_password}/turnstile"
     ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")

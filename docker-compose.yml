@@ -6,6 +6,10 @@ services:
       - "40000:40000"
     volumes:
       - ./data:/data
+    environment:
+      # CFBypass 端点(server) 与 checkin-api 内部调用(executor) 共用此密码，
+      # 修改后容器内两端自动同步；远程青龙脚本请用同名密码的 BYPASS_PASSWORD 变量保持一致
+      - PASSWORD=gua12345
     restart: unless-stopped
     # 每次 up 都拉取最新镜像（手动构建后更新用）
     pull_policy: always
