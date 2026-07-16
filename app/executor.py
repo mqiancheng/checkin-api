@@ -92,10 +92,13 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
 
         setting = db.query(Setting).first()
         bypass_url = (setting.bypass_url or "").strip() if setting else ""
+        # 统一用 host 基础 + 环境变量密码拼接，避免裸用基础地址导致缺 /cookies 路径
+        cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
         if not bypass_url:
             # 合并模式：未配置外部 bypass 时，默认自调容器内 CFBypass 端点
-            cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
             bypass_url = f"http://127.0.0.1:10000/{cfb_password}/cookies"
+        else:
+            bypass_url = f"{_bypass_host()}/{cfb_password}/cookies"
 
         ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
@@ -131,10 +134,12 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
         db.close()
 
 
-def _resolve_bypass_base() -> str:
-    """返回 CFBypass 端点 base（含密码，不含 /cookies 或 /turnstile）。
+def _bypass_host() -> str:
+    """返回 CFBypass 端点 host 基础（scheme://host:port，不含密码与路径）。
 
-    例如 http://127.0.0.1:10000/mnqswhai 或用户配置的完整地址去掉末段。
+    用户只需在全局设置填 host:port（如 http://192.168.6.100:10001），
+    密码统一用环境变量 CFB_PASSWORD（默认 mnqswhai）拼接，
+    避免只填基础地址导致缺密码段 / 缺 /cookies 路径而 404。
     """
     db = SessionLocal()
     try:
@@ -143,10 +148,10 @@ def _resolve_bypass_base() -> str:
     finally:
         db.close()
     if not bypass_url:
-        cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
-        return f"http://127.0.0.1:10000/{cfb_password}"
-    # 去掉末尾的 /cookies 或 /turnstile（若有），得到 base
-    return re.sub(r"/(cookies|turnstile)$", "", bypass_url.rstrip("/"))
+        return "http://127.0.0.1:10000"
+    # 只取 scheme://host:port，丢弃用户可能误填的路径/密码段
+    m = re.match(r"^(https?://[^/]+)", bypass_url)
+    return m.group(1) if m else bypass_url.rstrip("/")
 
 
 def _get_turnstile(url: str) -> dict | None:
@@ -156,8 +161,8 @@ def _get_turnstile(url: str) -> dict | None:
     返回 {"cf_clearance": str, "user_agent": str, "turnstile_token": str} 或 None。
     """
     domain = urlparse(url).netloc
-    base = _resolve_bypass_base()
-    turnstile_url = f"{base}/turnstile"
+    cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
+    turnstile_url = f"{_bypass_host()}/{cfb_password}/turnstile"
     ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
     try:
