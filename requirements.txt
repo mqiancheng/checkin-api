@@ -6,5 +6,6 @@ curl_cffi==0.7.1
 apscheduler==3.10.4
 pydantic==2.9.2
 cloakbrowser      # CFBypass v2 端点：隐身 Chromium（过 Managed Challenge），自带二进制，无需系统 chromium
+camoufox          # 浏览器内执行模式（反检测 Firefox），camoufox 执行方式需要
 psutil>=5.9.0             # CFBypass 代理管理
 aiohttp>=3.9              # CFBypass 依赖
