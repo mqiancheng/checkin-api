@@ -92,7 +92,9 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
         setting = db.query(Setting).first()
         bypass_url = (setting.bypass_url or "").strip() if setting else ""
         if not bypass_url:
-            return None
+            # 合并模式：未配置外部 bypass 时，默认自调容器内 CFBypass 端点
+            cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
+            bypass_url = f"http://127.0.0.1:10000/{cfb_password}/cookies"
 
         ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")

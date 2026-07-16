@@ -6,3 +6,7 @@ curl_cffi==0.7.1
 apscheduler==3.10.4
 pydantic==2.9.2
 camoufox          # 浏览器内执行模式（反检测 Firefox），仅 browser 任务需要
+DrissionPage==4.1.0.17   # CFBypass 端点：DrissionPage + Chrome 过 Cloudflare
+psutil==5.5.1             # CFBypass 代理管理
+PyVirtualDisplay          # CFBypass 有头模式虚拟显示（Xvfb）
+aiohttp                   # CFBypass 依赖
