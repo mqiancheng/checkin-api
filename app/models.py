@@ -30,6 +30,7 @@ class Task(Base):
     # 执行方式
     executor_type = Column(String(10), default="http", nullable=False)  # http | browser
     cf_bypass = Column(String(8), default="auto", nullable=False)       # auto | on | off
+    cf_turnstile = Column(Boolean, default=False)                       # 是否需要提交 Turnstile token（调 /turnstile 端点）
 
     # 调度
     schedule_type = Column(String(10), default="daily")  # daily | cron

@@ -39,6 +39,10 @@
             </el-select>
             <span style="margin-left:8px;color:#999;">普通 JS 盾站点用，需先在「全局设置」填 NAS bypass 地址</span>
           </el-form-item>
+          <el-form-item label="Turnstile">
+            <el-switch v-model="form.cf_turnstile" />
+            <span style="margin-left:8px;color:#999;">站点有 Turnstile 人机验证时开启；开启后会在 Body/参数/Header 中把 <code>{{ "{{turnstile_token}}" }}</code> 替换为获取的 token</span>
+          </el-form-item>
           <el-form-item label="Headers"><KeyValueEditor :model-value="headerRows" /></el-form-item>
           <el-form-item label="Cookies"><KeyValueEditor :model-value="cookieRows" /></el-form-item>
           <el-form-item label="Query 参数"><KeyValueEditor :model-value="paramRows" /></el-form-item>
@@ -159,7 +163,7 @@ const ops = [
 const form = reactive({
   name: '未命名任务', enabled: true, method: 'POST', url: '',
   headers: {}, cookies: {}, params: {}, body: '', body_type: 'json', raw_text: '',
-  executor_type: 'http', cf_bypass: 'auto',
+  executor_type: 'http', cf_bypass: 'auto', cf_turnstile: false,
   schedule_type: 'daily', hour: 9, minute: 0, cron_expr: '', random_delay: 0,
   logic: 'AND', conditions: [], fields: [], response_type: 'json',
 })

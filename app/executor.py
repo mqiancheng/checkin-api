@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime
 from urllib.parse import urlencode, urlparse
 
@@ -128,6 +129,76 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
         return {"cf_clearance": cl, "user_agent": ua_used, "from_cache": False}
     finally:
         db.close()
+
+
+def _resolve_bypass_base() -> str:
+    """返回 CFBypass 端点 base（含密码，不含 /cookies 或 /turnstile）。
+
+    例如 http://127.0.0.1:10000/mnqswhai 或用户配置的完整地址去掉末段。
+    """
+    db = SessionLocal()
+    try:
+        setting = db.query(Setting).first()
+        bypass_url = (setting.bypass_url or "").strip() if setting else ""
+    finally:
+        db.close()
+    if not bypass_url:
+        cfb_password = os.environ.get("CFB_PASSWORD", "mnqswhai")
+        return f"http://127.0.0.1:10000/{cfb_password}"
+    # 去掉末尾的 /cookies 或 /turnstile（若有），得到 base
+    return re.sub(r"/(cookies|turnstile)$", "", bypass_url.rstrip("/"))
+
+
+def _get_turnstile(url: str) -> dict | None:
+    """通过 CFBypass 的 /turnstile 端点获取 cf_clearance + turnstile_token。
+
+    用于需要提交 Turnstile 验证码的站点（如登录表单）。
+    返回 {"cf_clearance": str, "user_agent": str, "turnstile_token": str} 或 None。
+    """
+    domain = urlparse(url).netloc
+    base = _resolve_bypass_base()
+    turnstile_url = f"{base}/turnstile"
+    ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
+    try:
+        r = httpx.get(
+            turnstile_url,
+            params={"url": f"https://{domain}/", "user_agent": ua},
+            timeout=120,
+        )
+        data = r.json()
+    except Exception:
+        return None
+
+    cf_cookies = data.get("cookies", {})
+    cl = cf_cookies.get("cf_clearance") if isinstance(cf_cookies, dict) else None
+    token = data.get("turnstile_token") or ""
+    if isinstance(cf_cookies, dict):
+        token = token or (cf_cookies.get("turnstile_token") or "")
+    if not cl:
+        return None
+    return {
+        "cf_clearance": cl,
+        "user_agent": data.get("user_agent", ua),
+        "turnstile_token": token,
+    }
+
+
+def _inject_turnstile(params, headers, body, token: str):
+    """把 params / headers / body 中的 {{turnstile_token}} 占位符替换为 token。"""
+    def _rep(v):
+        if isinstance(v, str):
+            return v.replace("{{turnstile_token}}", token)
+        return v
+    new_params = {k: _rep(v) for k, v in (params or {}).items()}
+    new_headers = {k: _rep(v) for k, v in (headers or {}).items()}
+    if isinstance(body, dict):
+        new_body = {k: _rep(v) for k, v in body.items()}
+    elif isinstance(body, str):
+        new_body = body.replace("{{turnstile_token}}", token)
+    else:
+        new_body = body
+    return new_params, new_headers, new_body
 
 
 def _wait_cf(page, max_wait: int = 40) -> bool:
@@ -411,6 +482,27 @@ def _send_http(task, params, headers, body, stage=None) -> tuple[int, bytes]:
                 pass
 
     mode = (task.cf_bypass or "auto").lower()
+
+    # Turnstile 任务：先获取 token + clearance 并注入，再直接发送（不走 auto 重试逻辑）
+    if getattr(task, "cf_turnstile", False) and mode != "off":
+        _stage("该任务需要 Turnstile，调用 bypass /turnstile 端点")
+        ts = _get_turnstile(task.url)
+        if ts:
+            retry_headers = dict(headers)
+            retry_headers["Cookie"] = _merge_cookie(
+                retry_headers.get("Cookie", ""), {"cf_clearance": ts["cf_clearance"]}
+            )
+            if ts.get("user_agent"):
+                retry_headers["user-agent"] = ts["user_agent"]
+            token = ts.get("turnstile_token") or ""
+            if token:
+                params, retry_headers, body = _inject_turnstile(params, retry_headers, body, token)
+                _stage("已注入 cf_clearance 与 turnstile_token，直接发送")
+            else:
+                _stage("已注入 cf_clearance（站点无 Turnstile，未返回 token），直接发送")
+            return _send(task, params, retry_headers, body)
+        else:
+            _stage("未能获取 Turnstile（bypass 服务不可用），退回普通模式")
 
     if mode == "off":
         _stage("HTTP 模式：直接发起请求（CF Bypass 关闭）")

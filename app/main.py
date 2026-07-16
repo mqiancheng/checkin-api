@@ -28,6 +28,7 @@ class TaskIn(BaseModel):
     raw_text: str = ""
     executor_type: str = "http"   # http | browser
     cf_bypass: str = "auto"       # auto | on | off
+    cf_turnstile: bool = False    # 是否需要提交 Turnstile token
     schedule_type: str = "daily"
     hour: int = 9
     minute: int = 0
@@ -270,6 +271,7 @@ def _task_kwargs(body: TaskIn) -> dict:
         "raw_text": body.raw_text,
         "executor_type": body.executor_type,
         "cf_bypass": body.cf_bypass,
+        "cf_turnstile": body.cf_turnstile,
         "schedule_type": body.schedule_type,
         "hour": body.hour,
         "minute": body.minute,
@@ -297,6 +299,7 @@ def _task_out(t: Task) -> dict:
         "raw_text": t.raw_text,
         "executor_type": t.executor_type,
         "cf_bypass": t.cf_bypass,
+        "cf_turnstile": t.cf_turnstile,
         "schedule_type": t.schedule_type,
         "hour": t.hour,
         "minute": t.minute,

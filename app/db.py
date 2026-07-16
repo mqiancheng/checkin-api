@@ -25,6 +25,7 @@ def _migrate_columns():
     task_adds = {
         "executor_type": "VARCHAR(10) NOT NULL DEFAULT 'http'",
         "cf_bypass": "VARCHAR(8) NOT NULL DEFAULT 'auto'",
+        "cf_turnstile": "BOOLEAN NOT NULL DEFAULT 0",
     }
     for col, ddl in task_adds.items():
         if col not in task_cols:
