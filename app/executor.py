@@ -110,12 +110,15 @@ def _get_clearance(url: str, force: bool = False) -> dict | None:
                 timeout=90,
             )
             data = r.json()
-        except Exception:
+        except Exception as e:
+            _stage(f"调用 bypass 服务异常: {e}")
             return None
 
+        _stage(f"bypass 服务返回: status={r.status_code}, cookies_keys={list(data.get('cookies', {}).keys())}, ua={str(data.get('user_agent', ''))[:60]}")
         cf_cookies = data.get("cookies", {})
         cl = cf_cookies.get("cf_clearance") if isinstance(cf_cookies, dict) else None
         if not cl:
+            _stage("bypass 返回的 cookies 中无 cf_clearance（该站可能不下发此 cookie 或 bypass 未成功过盾）")
             return None
         ua_used = data.get("user_agent", ua)
 
