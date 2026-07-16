@@ -47,12 +47,18 @@ npm run dev        # http://localhost:40000 （/api 已代理到后端 8000）
 
 > 生产/ Docker 下只需暴露一个端口 **40000**：后端同时托管 UI 与 API。
 
-## 构建 Docker 镜像（前端打进镜像）
+## 部署（拉取预构建镜像）
+
+镜像由 GitHub Actions 手动构建并推送到 `ghcr.io/mqiancheng/checkin-api:latest`，直接拉取运行即可，无需本地构建。
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 # 访问 http://<服务器IP>:40000   （UI 与 API 同端口）
 ```
+
+- `docker-compose.yml` 已设 `pull_policy: always`，每次 `up` 都会拉取最新镜像。
+- 更新镜像：先在 GitHub `Actions` → `Build Docker Image` 手动触发构建，再 `docker compose up -d` 拉取新版。
+- 如需本地从源码构建：`docker compose up -d --build`（需把 `image:` 改回 `build: .`）。
 
 数据保存在挂载卷 `./data/app.db`（SQLite），重启不丢。
 

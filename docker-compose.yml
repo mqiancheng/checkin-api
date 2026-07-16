@@ -1,9 +1,11 @@
 services:
   checkin:
-    build: .
+    image: ghcr.io/mqiancheng/checkin-api:latest
     container_name: checkin-api
     ports:
       - "40000:40000"
     volumes:
       - ./data:/data
     restart: unless-stopped
+    # 每次 up 都拉取最新镜像（手动构建后更新用）
+    pull_policy: always
