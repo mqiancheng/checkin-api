@@ -37,11 +37,11 @@
               <el-option label="强制开启" value="on" />
               <el-option label="关闭" value="off" />
             </el-select>
-            <span style="margin-left:8px;color:#999;">普通 JS 盾站点用，需先在「全局设置」填 NAS bypass 地址</span>
+            <span style="margin-left:8px;color:#999;">普通 JS 盾站点用，内置 CFBypass 端点自动识别，无需手动填写</span>
           </el-form-item>
           <el-form-item label="Turnstile">
             <el-switch v-model="form.cf_turnstile" />
-            <span style="margin-left:8px;color:#999;">站点有 Turnstile 人机验证时开启；开启后会在 Body/参数/Header 中把 <code>{{ "{{turnstile_token}}" }}</code> 替换为获取的 token</span>
+            <span style="margin-left:8px;color:#999;">站点有 Turnstile 人机验证时开启；开启后会在 Body/参数/Header 中把 <code>&#123;&#123;turnstile_token&#125;&#125;</code> 替换为获取的 token</span>
           </el-form-item>
           <el-form-item label="Headers"><KeyValueEditor :model-value="headerRows" /></el-form-item>
           <el-form-item label="Cookies"><KeyValueEditor :model-value="cookieRows" /></el-form-item>
