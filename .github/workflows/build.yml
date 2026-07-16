@@ -1,4 +1,4 @@
-yuname: Build Docker Image
+name: Build Docker Image
 
 # 仅手动触发，不会因普通 push 自动构建
 on:
