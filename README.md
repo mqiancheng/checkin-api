@@ -54,8 +54,10 @@ npm run dev        # http://localhost:40000 （/api 已代理到后端 8000）
 ```bash
 docker compose up -d
 # 访问 http://<服务器IP>:40000   （UI 与 API 同端口）
+# 内置 CFBypass 端点：http://<服务器IP>:10000  （供外部/青龙脚本调用，详见「CF Bypass」章节）
 ```
 
+- 端口：`40000` = WebUI/API，`10000` = 内置 CFBypass 端点（外部调用用）。
 - `docker-compose.yml` 已设 `pull_policy: always`，每次 `up` 都会拉取最新镜像。
 - 更新镜像：先在 GitHub `Actions` → `Build Docker Image` 手动触发构建，再 `docker compose up -d` 拉取新版。
 - 如需本地从源码构建：`docker compose up -d --build`（需把 `image:` 改回 `build: .`）。
@@ -94,10 +96,32 @@ docker compose up -d
 - 镜像已包含 Firefox 系统依赖，构建时会下载 camoufox 内置 Firefox（约 +150MB）。
 
 ### CF Bypass（普通 JS 盾站点）
-在「全局设置」填写 NAS 上 CloudflareBypassForScraping 服务的地址（如 `http://192.168.1.1:10000/<你的CFB密码>/cookies`）。
-- `auto`（默认）：仅当请求被 CF 拦截时才调用，按域名缓存 `cf_clearance`（默认 12h），缓存失效自动刷新重试。
-- `on`：强制注入 clearance。
+
+本项目已**内置 CFBypass 端点**（基于 CloudflareBypassForScraping），与主服务同容器运行，无需再单独部署或手动填写地址：
+
+- 主服务 WebUI / API：端口 **40000**
+- 内置 CFBypass 端点：端口 **10000**（可用环境变量 `CFB_PORT` 修改，需与 `docker-compose.yml` 端口映射一致）
+
+「全局设置 → Bypass 地址」现在是**只读自动显示**（`http://<访问WebUI的主机>:10000`），无需手动填写。
+
+**三档模式（任务级，编辑任务 →「执行方式」旁的 CF Bypass 下拉）：**
+- `auto`（默认）：仅当请求被 CF 拦截时才调用，**优先用缓存**（按域名缓存 `cf_clearance`，默认 12h），缓存失效自动刷新重试。最省资源。
+- `on`（强制）：**每次都跳过缓存、直接调 cfbypass 获取全新 `cf_clearance`** 注入后发送（不先发试探请求）。
 - `off`：完全不调用。
+
+**密码配置**：CFBypass 端点与内部调用共用容器环境变量 `PASSWORD`（由 `.env` 的 `CFB_PASSWORD` 注入，默认 `gua12345`，**请务必改成自定义强密码**）。
+
+```bash
+# .env（仓库外，已被 gitignore）
+CFB_PASSWORD=你的强密码
+```
+
+**外部调用（如青龙脚本）**：内置端点已通过 `10000:10000` 端口发布，外部可直接访问：
+```
+http://<服务器IP>:10000/<你的CFB密码>/cookies
+http://<服务器IP>:10000/<你的CFB密码>/turnstile
+```
+青龙侧用同名变量 `BYPASS_PASSWORD` 设置成与 `CFB_PASSWORD` **相同的值**即可（变量名不同，值必须一致）。
 
 > 注意：`cf_clearance` 按域名独立签发，**不能跨站通用**；且 Managed Challenge 站点的 clearance 与浏览器指纹绑定，程序无法复用——这类站点必须用「浏览器内执行」，CF Bypass 救不了。
 
