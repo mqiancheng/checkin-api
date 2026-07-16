@@ -23,6 +23,14 @@ from app.notify import notify
 # 配合"请求被拦则强制刷新"机制：即便缓存期内提前失效，也只会多调一次 bypass。
 BYPASS_CACHE_TTL = 3600 * 12
 
+# camoufox 反检测浏览器是否可用（仅在 camoufox 模式时按需 import）
+HAS_CAMOUFOX = False
+try:
+    from camoufox.sync_api import Camoufox  # noqa: F401
+    HAS_CAMOUFOX = True
+except ImportError:
+    HAS_CAMOUFOX = False
+
 
 
 
@@ -201,6 +209,28 @@ def _inject_turnstile(params, headers, body, token: str):
 
 
 
+def _wait_cf(page, max_wait: int = 40) -> bool:
+    """等待 Cloudflare 验证通过（如有）。返回 True 表示已放行。"""
+    import time
+    time.sleep(3)
+    for _ in range(max_wait // 3):
+        try:
+            title = page.title()
+            if "Just a moment" not in title and "Attention Required" not in title:
+                return True
+            try:
+                checkbox = page.locator('#challenge-stage label, [id*="challenge"]')
+                if checkbox.count() > 0:
+                    checkbox.first.click()
+                    time.sleep(3)
+            except Exception:
+                pass
+            time.sleep(3)
+        except Exception:
+            time.sleep(3)
+    return False
+
+
 def _send_browser(task, params, headers, body, cookies, stage=None) -> tuple[int, bytes]:
     """通过 cfbypass 服务的 /exec 端点，由 CloakBrowser 在页面上下文内执行 API。
 
@@ -267,7 +297,114 @@ def _send_browser(task, params, headers, body, cookies, stage=None) -> tuple[int
     return data.get("status", 0), (data.get("text") or "").encode("utf-8")
 
 
+def _send_camoufox(task, params, headers, body, cookies, stage=None) -> tuple[int, bytes]:
+    """用 camoufox 反检测浏览器在页面上下文内执行 API（应对 Managed Challenge）。
 
+    等价于在 F12 Console 里敲 fetch：camoufox（反检测 Firefox）先过 CF（无感放行），
+    再在页面内发请求，绕开 cf_clearance 与浏览器指纹绑定的限制。适合 vikacg 等
+    普通 Chromium/Playwright 过不去的硬骨头站点。
+
+    stage: 可选的进度回调，用于把执行阶段实时写入日志。
+    """
+    if not HAS_CAMOUFOX:
+        return 0, "camoufox 未安装，无法执行 camoufox 模式任务".encode("utf-8")
+
+    from camoufox.sync_api import Camoufox
+
+    full_url = task.url
+    if params:
+        full_url += ("&" if "?" in full_url else "?") + urlencode(params)
+    domain = urlparse(task.url).netloc
+    origin = f"https://{domain}/"
+
+    # 合并 cookie：任务 cookies + 请求头里的 Cookie
+    all_cookies = dict(cookies)
+    hdr_cookie = headers.get("Cookie") or headers.get("cookie")
+    if hdr_cookie:
+        for item in hdr_cookie.split(";"):
+            item = item.strip()
+            if "=" in item:
+                k, v = item.split("=", 1)
+                all_cookies[k.strip()] = v.strip()
+    # 浏览器内 fetch 不需要 Cookie 头（已通过 add_cookies 注入上下文）
+    headers.pop("Cookie", None)
+    headers.pop("cookie", None)
+
+    body_str = body if isinstance(body, str) else json.dumps(body)
+
+    def _stage(msg):
+        if stage:
+            try:
+                stage(msg)
+            except Exception:
+                pass
+
+    # 只放行：同站资源 + 目标 API + Cloudflare 挑战脚本；拦截其余跨站资源。
+    # 站点自身的第三方脚本（analytics/广告）常抛未捕获错误，会触发 camoufox 内置
+    # playwright 的 pageerror bug 导致驱动崩溃；拦截它们可从源头避免。
+    def _route(route):
+        url = route.request.url
+        low = url.lower()
+        if (url.startswith(f"https://{domain}")
+                or url.startswith(f"http://{domain}")
+                or full_url in url or url.startswith(full_url)
+                or "cloudflare" in low):
+            return route.continue_()
+        return route.abort()
+
+    out: tuple[int, bytes] = (0, b"")
+    err: str | None = None
+    try:
+        _stage("启动 camoufox 反检测浏览器...")
+        with Camoufox(headless=True) as browser:
+            try:
+                context = browser.new_context()
+                if all_cookies:
+                    context.add_cookies([
+                        {"name": k, "value": v, "domain": domain, "path": "/"}
+                        for k, v in all_cookies.items()
+                    ])
+                page = context.new_page()
+                page.set_viewport_size({"width": 1920, "height": 1080})
+                page.route("**/*", _route)
+
+                _stage(f"打开站点 {origin} 并等待 Cloudflare 放行...")
+                page.goto(origin, wait_until="domcontentloaded", timeout=30000)
+                if not _wait_cf(page):
+                    err = "Cloudflare 验证超时，camoufox 模式任务被拦截"
+                else:
+                    _stage("在页面上下文内发起 API 请求...")
+                    try:
+                        result = page.evaluate(
+                            """async (args) => {
+                                const r = await fetch(args.url, {
+                                    method: args.method,
+                                    headers: args.headers,
+                                    body: args.body
+                                });
+                                const t = await r.text();
+                                return {status: r.status, text: t};
+                            }""",
+                            {"url": full_url, "method": task.method,
+                             "headers": headers, "body": body_str if task.method not in ("GET", "HEAD") else None},
+                        )
+                        status = result.get("status", 200) if isinstance(result, dict) else 200
+                        text = result.get("text", "") if isinstance(result, dict) else str(result)
+                        out = (status, text.encode("utf-8"))
+                    except Exception as ev:
+                        err = f"页面内请求执行失败: {ev}"
+            except Exception as ex:
+                if err is None:
+                    err = f"浏览器执行异常: {ex}"
+    except Exception as close_ex:
+        # with __exit__ 关闭时若浏览器已崩溃会抛 Browser.close 错误，忽略它，
+        # 优先保留上面已捕获的真实错误/结果。
+        if err is None and out == (0, b""):
+            err = f"浏览器执行异常: {close_ex}"
+
+    if err is not None:
+        return 0, err.encode("utf-8")
+    return out[0], out[1]
 
 
 def _send_http(task, params, headers, body, stage=None) -> tuple[int, bytes]:
@@ -474,7 +611,10 @@ def execute_task(task_id: int, manual: bool = False, log_id: int = 0) -> dict:
                 pass
 
         try:
-            if task.executor_type in ("chrome", "browser", "camoufox"):
+            if task.executor_type == "camoufox":
+                stage(f"浏览器模式（camoufox 反检测）：{task.method} {task.url}")
+                status_code, raw_bytes = _send_camoufox(task, params, headers, body, cookies, stage)
+            elif task.executor_type == "browser":
                 stage(f"浏览器模式（CloakBrowser）：{task.method} {task.url}")
                 status_code, raw_bytes = _send_browser(task, params, headers, body, cookies, stage)
             else:

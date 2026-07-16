@@ -25,11 +25,12 @@
           </el-form-item>
           <el-form-item label="URL"><el-input v-model="form.url" /></el-form-item>
           <el-form-item label="执行方式">
-            <el-select v-model="form.executor_type" style="width:240px;">
+            <el-select v-model="form.executor_type" style="width:260px;">
               <el-option label="HTTP 请求（默认）" value="http" />
-              <el-option label="浏览器内执行（反检测，应对 CF Managed 验证）" value="browser" />
+              <el-option label="浏览器内执行（CloakBrowser）" value="browser" />
+              <el-option label="浏览器内执行（camoufox 反检测，应对 CF Managed 验证）" value="camoufox" />
             </el-select>
-            <span style="margin-left:8px;color:#999;">vikacg 等需过人机验证的站点选「浏览器内执行」</span>
+            <span style="margin-left:8px;color:#999;">vikacg 等需过人机验证的站点选「camoufox」</span>
           </el-form-item>
           <el-form-item label="CF Bypass">
             <el-select v-model="form.cf_bypass" style="width:240px;">
