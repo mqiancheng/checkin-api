@@ -30,6 +30,12 @@ export default {
   logDetail(id) {
     return http.get(`/logs/${id}`)
   },
+  deleteLog(id) {
+    return http.delete(`/logs/${id}`)
+  },
+  deleteLogs(taskId = 0) {
+    return http.delete('/logs', { params: { task_id: taskId } })
+  },
   getSettings() {
     return http.get('/settings')
   },

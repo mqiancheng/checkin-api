@@ -56,10 +56,12 @@ class RunLog(Base):
     task_name = Column(String(200), default="")
     success = Column(Boolean, default=False)
     status_code = Column(Integer, default=0)
-    formatted = Column(Text, default="")     # 按字段映射生成的展示文本
+    formatted = Column(Text, default="")     # 最终结果摘要（字段映射/原始响应），日志列表显示用
     raw_response = Column(Text, default="")  # 完整原始响应（调试用）
     error = Column(Text, default="")
-    ran_at = Column(DateTime, default=datetime.now)
+    ran_at = Column(DateTime, default=datetime.now)          # 开始执行时间（日志创建时刻）
+    finished_at = Column(DateTime, default=None)             # 执行完毕时间
+    process_log = Column(Text, default="")   # 执行过程步骤（▶ 开头的行），详情弹窗展示用
 
 
 class Setting(Base):

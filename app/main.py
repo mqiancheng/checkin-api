@@ -123,7 +123,39 @@ def delete_task(task_id: int):
 
 @app.post("/api/tasks/{task_id}/run")
 def run_task(task_id: int):
-    return execute_task(task_id, manual=True)
+    """触发任务执行（异步：立即返回 log_id，任务在后台运行，前端轮询日志查看进度）。"""
+    # 先创建一条 running 日志，拿到 log_id
+    with SessionLocal() as db:
+        task = db.get(Task, task_id)
+        if not task:
+            raise HTTPException(404, "任务不存在")
+        log = RunLog(
+            task_id=task.id, task_name=task.name, success=False,
+            status_code=0, formatted="⏳ 任务执行中...", raw_response="", error="",
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+        log_id = log.id
+
+    # 后台线程执行（不阻塞 HTTP 响应），传入预创建的 log_id
+    import threading
+    _tid = task_id
+    _lid = log_id
+    def _bg():
+        try:
+            execute_task(_tid, manual=True, log_id=_lid)
+        except Exception as ex:
+            with SessionLocal() as db:
+                l = db.get(RunLog, _lid)
+                if l and l.formatted == "⏳ 任务执行中...":
+                    l.success = False
+                    l.error = str(ex)
+                    l.formatted = f"❌ 执行异常: {ex}"
+                    db.commit()
+    threading.Thread(target=_bg, daemon=True).start()
+
+    return {"ok": True, "log_id": log_id}
 
 
 # ---------- 日志 ----------
@@ -142,8 +174,10 @@ def list_logs(task_id: int = 0, limit: int = 50):
                 "success": l.success,
                 "status_code": l.status_code,
                 "formatted": l.formatted,
+                "process_log": l.process_log or "",
                 "error": l.error,
                 "ran_at": l.ran_at.isoformat() if l.ran_at else "",
+                "finished_at": l.finished_at.isoformat() if l.finished_at else "",
             }
             for l in logs
         ]
@@ -162,10 +196,35 @@ def log_detail(log_id: int):
             "success": l.success,
             "status_code": l.status_code,
             "formatted": l.formatted,
+            "process_log": l.process_log or "",
             "raw_response": l.raw_response,
             "error": l.error,
             "ran_at": l.ran_at.isoformat() if l.ran_at else "",
+            "finished_at": l.finished_at.isoformat() if l.finished_at else "",
         }
+
+
+@app.delete("/api/logs/{log_id}")
+def delete_log(log_id: int):
+    with SessionLocal() as db:
+        l = db.get(RunLog, log_id)
+        if not l:
+            raise HTTPException(404, "日志不存在")
+        db.delete(l)
+        db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/logs")
+def delete_logs(task_id: int = 0):
+    """批量删除日志（可按 task_id 过滤，不传则清空全部）。"""
+    with SessionLocal() as db:
+        q = db.query(RunLog)
+        if task_id:
+            q = q.filter(RunLog.task_id == task_id)
+        count = q.delete(synchronize_session=False)
+        db.commit()
+    return {"ok": True, "deleted": count}
 
 
 # ---------- 全局设置 ----------

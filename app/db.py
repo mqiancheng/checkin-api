@@ -31,6 +31,16 @@ def _migrate_columns():
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col} {ddl}"))
 
+    runlog_cols = {c["name"] for c in insp.get_columns("run_logs")}
+    runlog_adds = {
+        "process_log": "TEXT DEFAULT ''",
+        "finished_at": "DATETIME",
+    }
+    for col, ddl in runlog_adds.items():
+        if col not in runlog_cols:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE run_logs ADD COLUMN {col} {ddl}"))
+
     setting_cols = {c["name"] for c in insp.get_columns("settings")}
     if "bypass_url" not in setting_cols:
         with engine.begin() as conn:

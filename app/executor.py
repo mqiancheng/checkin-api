@@ -493,8 +493,14 @@ def _send(task, params, headers, body):
     return resp.status_code, resp.content
 
 
-def execute_task(task_id: int, manual: bool = False) -> dict:
-    """执行单个签到任务：发请求 -> 判定 -> 提取字段 -> 记日志 -> 通知。"""
+def execute_task(task_id: int, manual: bool = False, log_id: int = 0) -> dict:
+    """执行单个签到任务：发请求 -> 判定 -> 提取字段 -> 记日志 -> 通知。
+
+    Args:
+        task_id: 任务 ID
+        manual: 是否手动触发
+        log_id: 若 > 0，复用已存在的 RunLog 记录（由调用方预创建），不再新建
+    """
     db = SessionLocal()
     log = None
     try:
@@ -524,19 +530,31 @@ def execute_task(task_id: int, manual: bool = False) -> dict:
                 ae.lower().replace("zstd", "").replace(",,", ",").strip(", ").strip()
             )
 
-        # 先建一条 running 日志，便于实时查看进度（解决"只有结束才看到日志"）
-        log = RunLog(
-            task_id=task.id, task_name=task.name, success=False,
-            status_code=0, formatted="⏳ 任务执行中...", raw_response="", error="",
-        )
-        db.add(log)
-        db.commit()
+        # 创建/复用 running 日志，便于实时查看进度
+        if log_id > 0:
+            log = db.get(RunLog, log_id)
+            if not log:
+                # 预创建的日志不存在（异常情况），回退到新建
+                log_id = 0
+        if not log or log_id == 0:
+            log = RunLog(
+                task_id=task.id, task_name=task.name, success=False,
+                status_code=0, formatted="⏳ 任务执行中...", raw_response="", error="",
+                process_log="",
+            )
+            db.add(log)
+            db.commit()
 
         def stage(msg: str):
+            """记录执行过程步骤：持久写入 process_log，同步更新 formatted 供实时轮询。"""
             try:
                 cur = db.get(RunLog, log.id)
                 if cur:
-                    cur.formatted = f"{cur.formatted}\n▶ {msg}"
+                    line = f"▶ {msg}"
+                    # 持久化：追加到 process_log
+                    cur.process_log = (cur.process_log or "").rstrip() + "\n" + line
+                    # 实时：同步到 formatted 供轮询（执行期间 formatted 包含过程）
+                    cur.formatted = (cur.formatted or "").rstrip() + "\n" + line
                     db.commit()
             except Exception:
                 pass
@@ -561,6 +579,7 @@ def execute_task(task_id: int, manual: bool = False) -> dict:
                 log.status_code = 0
                 log.formatted = f"请求失败: {ex}"
                 log.error = str(ex)
+                log.finished_at = datetime.now()
                 db.commit()
             notify(task.name, False, f"请求失败: {ex}")
             return {"ok": False, "error": str(ex)}
@@ -588,17 +607,21 @@ def execute_task(task_id: int, manual: bool = False) -> dict:
         if log:
             log.success = success
             log.status_code = status_code
+            # formatted 最终只存结果摘要（供日志列表/弹窗最终状态使用，不含 ▶ 过程行）
+            # ▶ 过程日志仅在执行期间通过轮询可见，执行完毕后 formatted 被替换为纯结果
             log.formatted = formatted
             log.raw_response = raw_text
             log.error = ""
+            log.finished_at = datetime.now()
             db.commit()
-
-        notify(task.name, success, formatted)
+        # 返回值也带上完整日志（含过程），供弹窗展示
+        _final_formatted = log.formatted if log else formatted
+        notify(task.name, success, _final_formatted)
         return {
             "ok": True,
             "success": success,
             "status_code": status_code,
-            "formatted": formatted,
+            "formatted": _final_formatted,
             "raw": raw_text,
         }
     finally:
