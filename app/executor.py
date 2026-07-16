@@ -141,11 +141,13 @@ def _wait_cf(page, max_wait: int = 40) -> bool:
     return False
 
 
-def _send_browser(task, params, headers, body, cookies) -> tuple[int, bytes]:
+def _send_browser(task, params, headers, body, cookies, stage=None) -> tuple[int, bytes]:
     """用 camoufox 反检测浏览器在页面上下文内执行 API（应对 Managed Challenge）。
 
     等价于在 F12 Console 里敲 fetch：浏览器先过 CF（无感放行），再在页面内发请求，
     绕开 cf_clearance 与浏览器指纹绑定的限制。
+
+    stage: 可选的进度回调，用于把执行阶段实时写入日志。
     """
     if not HAS_CAMOUFOX:
         return 0, "camoufox 未安装，无法执行 browser 模式任务".encode("utf-8")
@@ -156,6 +158,7 @@ def _send_browser(task, params, headers, body, cookies) -> tuple[int, bytes]:
     if params:
         full_url += ("&" if "?" in full_url else "?") + urlencode(params)
     domain = urlparse(task.url).netloc
+    origin = f"https://{domain}/"
 
     # 合并 cookie：任务 cookies + 请求头里的 Cookie
     all_cookies = dict(cookies)
@@ -172,46 +175,82 @@ def _send_browser(task, params, headers, body, cookies) -> tuple[int, bytes]:
 
     body_str = body if isinstance(body, str) else json.dumps(body)
 
-    result = None
+    def _stage(msg):
+        if stage:
+            try:
+                stage(msg)
+            except Exception:
+                pass
+
+    # 只放行：同站资源 + 目标 API + Cloudflare 挑战脚本；拦截其余跨站资源。
+    # 站点自身的第三方脚本（analytics/广告）常抛未捕获错误，会触发 camoufox 内置
+    # playwright 的 pageerror bug 导致驱动崩溃；拦截它们可从源头避免。
+    def _route(route):
+        url = route.request.url
+        low = url.lower()
+        if (url.startswith(f"https://{domain}")
+                or url.startswith(f"http://{domain}")
+                or full_url in url or url.startswith(full_url)
+                or "cloudflare" in low):
+            return route.continue_()
+        return route.abort()
+
+    out: tuple[int, bytes] = (0, b"")
+    err: str | None = None
     try:
+        _stage("启动 camoufox 反检测浏览器...")
         with Camoufox(headless=True) as browser:
-            page = browser.new_page()
-            page.set_viewport_size({"width": 1920, "height": 1080})
-            origin = f"https://{domain}/"
-            page.goto(origin, wait_until="domcontentloaded", timeout=30000)
-            if not _wait_cf(page):
-                return 0, "Cloudflare 验证超时，浏览器模式任务被拦截".encode("utf-8")
+            try:
+                context = browser.new_context()
+                if all_cookies:
+                    context.add_cookies([
+                        {"name": k, "value": v, "domain": domain, "path": "/"}
+                        for k, v in all_cookies.items()
+                    ])
+                page = context.new_page()
+                page.set_viewport_size({"width": 1920, "height": 1080})
+                page.route("**/*", _route)
 
-            if all_cookies:
-                cookie_list = [
-                    {"name": k, "value": v, "domain": domain, "path": "/"}
-                    for k, v in all_cookies.items()
-                ]
-                page.context.add_cookies(cookie_list)
+                _stage(f"打开站点 {origin} 并等待 Cloudflare 放行...")
                 page.goto(origin, wait_until="domcontentloaded", timeout=30000)
-                _wait_cf(page)
+                if not _wait_cf(page):
+                    err = "Cloudflare 验证超时，浏览器模式任务被拦截"
+                else:
+                    _stage("在页面上下文内发起 API 请求...")
+                    try:
+                        result = page.evaluate(
+                            """async (args) => {
+                                const r = await fetch(args.url, {
+                                    method: args.method,
+                                    headers: args.headers,
+                                    body: args.body
+                                });
+                                const t = await r.text();
+                                return {status: r.status, text: t};
+                            }""",
+                            {"url": full_url, "method": task.method,
+                             "headers": headers, "body": body_str},
+                        )
+                        status = result.get("status", 200) if isinstance(result, dict) else 200
+                        text = result.get("text", "") if isinstance(result, dict) else str(result)
+                        out = (status, text.encode("utf-8"))
+                    except Exception as ev:
+                        err = f"页面内请求执行失败: {ev}"
+            except Exception as ex:
+                if err is None:
+                    err = f"浏览器执行异常: {ex}"
+    except Exception as close_ex:
+        # with __exit__ 关闭时若浏览器已崩溃会抛 Browser.close 错误，忽略它，
+        # 优先保留上面已捕获的真实错误/结果。
+        if err is None and out == (0, b""):
+            err = f"浏览器执行异常: {close_ex}"
 
-            result = page.evaluate(
-                """async (args) => {
-                    const r = await fetch(args.url, {
-                        method: args.method,
-                        headers: args.headers,
-                        body: args.body
-                    });
-                    const t = await r.text();
-                    return {status: r.status, text: t};
-                }""",
-                {"url": full_url, "method": task.method, "headers": headers, "body": body_str},
-            )
-    except Exception as ex:
-        return 0, f"浏览器执行异常: {ex}".encode("utf-8")
-
-    status = result.get("status", 200) if isinstance(result, dict) else 200
-    text = result.get("text", "") if isinstance(result, dict) else str(result)
-    return status, text.encode("utf-8")
+    if err is not None:
+        return 0, err.encode("utf-8")
+    return out[0], out[1]
 
 
-def _send_http(task, params, headers, body) -> tuple[int, bytes]:
+def _send_http(task, params, headers, body, stage=None) -> tuple[int, bytes]:
     """HTTP 模式发送请求，必要时自动调用 cf_bypass 获取 cf_clearance 重试。
 
     cf_bypass 三档：
@@ -219,20 +258,31 @@ def _send_http(task, params, headers, body) -> tuple[int, bytes]:
       on   -> 强制注入 cf_clearance（即便未被拦，先确保有 clearance）
       off  -> 完全不调用 bypass
     """
+    def _stage(m):
+        if stage:
+            try:
+                stage(m)
+            except Exception:
+                pass
+
     mode = (task.cf_bypass or "auto").lower()
 
     if mode == "off":
+        _stage("HTTP 模式：直接发起请求（CF Bypass 关闭）")
         return _send(task, params, headers, body)
 
+    _stage("HTTP 模式：发起请求")
     # 先正常发一次
     status_code, raw_bytes = _send(task, params, headers, body)
     if mode == "auto" and not _is_blocked(status_code, raw_bytes):
         return status_code, raw_bytes
 
+    _stage("请求被 Cloudflare 拦截或需 clearance，调用 bypass 服务获取 cf_clearance")
     # 需要 clearance：取缓存或调 bypass
     cl = _get_clearance(task.url)
     if not cl:
         # 拿不到 clearance，返回原始响应（由判定逻辑决定成败）
+        _stage("未能获取 cf_clearance（bypass 服务不可用或未配置），返回原始响应")
         return status_code, raw_bytes
 
     retry_headers = dict(headers)
@@ -242,10 +292,12 @@ def _send_http(task, params, headers, body) -> tuple[int, bytes]:
     if cl.get("user_agent"):
         retry_headers["user-agent"] = cl["user_agent"]
 
+    _stage("注入 cf_clearance 后重试")
     status_code, raw_bytes = _send(task, params, retry_headers, body)
 
     # 若用的是缓存且仍被拦，说明缓存提前失效 -> 强制刷新 bypass 再试一次
     if cl.get("from_cache") and _is_blocked(status_code, raw_bytes):
+        _stage("缓存的 clearance 已失效，强制刷新 bypass 重试")
         cl2 = _get_clearance(task.url, force=True)
         if cl2:
             retry_headers["Cookie"] = _merge_cookie(
@@ -301,6 +353,7 @@ def _send(task, params, headers, body):
 def execute_task(task_id: int, manual: bool = False) -> dict:
     """执行单个签到任务：发请求 -> 判定 -> 提取字段 -> 记日志 -> 通知。"""
     db = SessionLocal()
+    log = None
     try:
         task = db.get(Task, task_id)
         if not task:
@@ -328,28 +381,41 @@ def execute_task(task_id: int, manual: bool = False) -> dict:
                 ae.lower().replace("zstd", "").replace(",,", ",").strip(", ").strip()
             )
 
+        # 先建一条 running 日志，便于实时查看进度（解决"只有结束才看到日志"）
+        log = RunLog(
+            task_id=task.id, task_name=task.name, success=False,
+            status_code=0, formatted="⏳ 任务执行中...", raw_response="", error="",
+        )
+        db.add(log)
+        db.commit()
+
+        def stage(msg: str):
+            try:
+                cur = db.get(RunLog, log.id)
+                if cur:
+                    cur.formatted = f"{cur.formatted}\n▶ {msg}"
+                    db.commit()
+            except Exception:
+                pass
+
         try:
             if task.executor_type == "browser":
-                status_code, raw_bytes = _send_browser(task, params, headers, body, cookies)
+                stage(f"浏览器模式：{task.method} {task.url}")
+                status_code, raw_bytes = _send_browser(task, params, headers, body, cookies, stage)
             else:
-                status_code, raw_bytes = _send_http(task, params, headers, body)
+                status_code, raw_bytes = _send_http(task, params, headers, body, stage)
             raw_text = _decode_bytes(raw_bytes)
             try:
                 data = json.loads(raw_text)
             except json.JSONDecodeError:
                 data = None
         except Exception as ex:  # 网络/请求级错误
-            log = RunLog(
-                task_id=task.id,
-                task_name=task.name,
-                success=False,
-                status_code=0,
-                formatted=f"请求失败: {ex}",
-                raw_response="",
-                error=str(ex),
-            )
-            db.add(log)
-            db.commit()
+            if log:
+                log.success = False
+                log.status_code = 0
+                log.formatted = f"请求失败: {ex}"
+                log.error = str(ex)
+                db.commit()
             notify(task.name, False, f"请求失败: {ex}")
             return {"ok": False, "error": str(ex)}
 
@@ -373,17 +439,13 @@ def execute_task(task_id: int, manual: bool = False) -> dict:
             lines.append(f"{label}: {val if val is not None else '(无)'}")
         formatted = "\n".join(lines) if lines else (raw_text[:500] or "(空响应)")
 
-        log = RunLog(
-            task_id=task.id,
-            task_name=task.name,
-            success=success,
-            status_code=status_code,
-            formatted=formatted,
-            raw_response=raw_text,
-            error="",
-        )
-        db.add(log)
-        db.commit()
+        if log:
+            log.success = success
+            log.status_code = status_code
+            log.formatted = formatted
+            log.raw_response = raw_text
+            log.error = ""
+            db.commit()
 
         notify(task.name, success, formatted)
         return {
