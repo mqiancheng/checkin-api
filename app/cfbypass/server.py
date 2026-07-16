@@ -104,7 +104,7 @@ async def get_cookies(
     url: Optional[str] = Query(None, description="Target URL to get cookies for"),
     retries: int = Query(5, ge=1, le=10),
 ):
-    if not url or not is_safe_url(url):
+    if not url or not _is_safe_url(url):
         raise HTTPException(status_code=400, detail="Invalid or unsafe URL")
     try:
         data = await bypasser.get_or_generate_cookies(url, None)
@@ -124,7 +124,7 @@ async def get_turnstile(
     url: Optional[str] = Query(None, description="Target URL to get cookies+token for"),
     retries: int = Query(5, ge=1, le=10),
 ):
-    if not url or not is_safe_url(url):
+    if not url or not _is_safe_url(url):
         raise HTTPException(status_code=400, detail="Invalid or unsafe URL")
     try:
         data = await bypasser.get_or_generate_cookies(url, None)
