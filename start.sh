@@ -10,6 +10,8 @@ export DISPLAY=:99
 uvicorn app.main:app --host 0.0.0.0 --port 40000 &
 
 # CFBypass 端点：对外提供 /{password}/cookies、/{password}/turnstile
-uvicorn app.cfbypass.server:app --host 0.0.0.0 --port 10000 &
+# 端口可由 CFB_PORT 环境变量覆盖（默认 10000），需与 docker-compose 端口映射、WebUI 自动识别保持一致
+CFB_PORT=${CFB_PORT:-10000}
+uvicorn app.cfbypass.server:app --host 0.0.0.0 --port $CFB_PORT &
 
 wait

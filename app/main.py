@@ -239,6 +239,8 @@ def get_settings():
             "timezone": s.timezone,
             "bypass_url": s.bypass_url,
             "chrome_path": s.chrome_path,
+            # CFBypass 端点端口（由 start.sh 的 CFB_PORT 决定，默认 10000），供前端自动拼出外部调用地址
+            "cfb_port": int(os.getenv("CFB_PORT", 10000)),
         }
 
 
@@ -249,7 +251,7 @@ def update_settings(body: SettingsIn):
         s.wecom_enabled = body.wecom_enabled
         s.wecom_webhook = body.wecom_webhook
         s.timezone = body.timezone
-        s.bypass_url = body.bypass_url
+        # bypass_url 不再由 UI 编辑（改为自动识别显示），此处保持不变以免误清空
         s.chrome_path = body.chrome_path
         db.commit()
         scheduler.reload_all()

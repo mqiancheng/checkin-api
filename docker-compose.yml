@@ -3,7 +3,8 @@ services:
     image: ghcr.io/mqiancheng/checkin-api:latest
     container_name: checkin-api
     ports:
-      - "40000:40000"
+      - "40000:40000"   # 签到助手 WebUI / API
+      - "10000:10000"   # 内置 CFBypass 端点（外部调用 / 青龙脚本用，需与 CFB_PORT 一致）
     volumes:
       - ./data:/data
     environment:
@@ -12,6 +13,8 @@ services:
       # 真实密码请放在仓库外 .env 文件中（已被 gitignore），例如 .env 里写 CFB_PASSWORD=你的强密码
       # 下面用 ${CFB_PASSWORD} 从 .env 注入；未设置时回退到 gua12345（请务必改成自定义强密码）
       - PASSWORD=${CFB_PASSWORD:-gua12345}
+      # CFBypass 端点监听端口（默认 10000，需与上方端口映射一致）
+      - CFB_PORT=10000
     restart: unless-stopped
     # 每次 up 都拉取最新镜像（手动构建后更新用）
     pull_policy: always

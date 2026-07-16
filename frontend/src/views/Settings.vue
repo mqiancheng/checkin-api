@@ -10,9 +10,13 @@
       </el-form-item>
       <el-divider>Cloudflare Bypass 服务</el-divider>
       <el-form-item label="Bypass 地址">
-        <el-input v-model="form.bypass_url" placeholder="http://192.168.x.x:10000/xxx/cookies" style="max-width:420px;" />
-        <div style="margin-top:4px;color:#999;font-size:12px;">
-          普通 JS 盾站点开启 CF Bypass 时使用，从 NAS 的 CloudflareBypassForScraping 服务获取 cf_clearance。留空则禁用自动 bypass。
+        <el-input :value="bypassBase" readonly style="max-width:420px;" />
+        <div style="margin-top:6px;color:#999;font-size:12px;line-height:1.7;">
+          本项目已内置 CFBypass 端点（端口 <code>{{ cfbPort }}</code>），地址由部署自动识别，无需手动填写。<br />
+          <b>外部调用（如青龙脚本）</b>：使用
+          <code>http://{{ hostname }}:{{ cfbPort }}/&lt;你的CFB密码&gt;/cookies</code><br />
+          其中「你的CFB密码」= 容器环境变量 <code>PASSWORD</code>（即 .env 中的 <code>CFB_PASSWORD</code>）；<br />
+          青龙侧用同名变量 <code>BYPASS_PASSWORD</code> 设置成相同值即可，例如 <code>BYPASS_PASSWORD=你的强密码</code>。
         </div>
       </el-form-item>
       <el-divider>企业微信机器人通知</el-divider>
@@ -30,15 +34,22 @@
 </template>
 
 <script setup>
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 
 const form = reactive({ wecom_enabled: false, wecom_webhook: '', timezone: 'Asia/Shanghai', bypass_url: '' })
+const cfbPort = ref(10000)
+const hostname = ref('')
+const bypassBase = ref('')
 
 async function load() {
   const { data } = await api.getSettings()
   Object.assign(form, data)
+  cfbPort.value = data.cfb_port || 10000
+  // 自动识别：用当前访问 WebUI 的主机名 + 内置 cfbypass 端口拼出外部调用地址
+  hostname.value = window.location.hostname
+  bypassBase.value = `${window.location.protocol}//${hostname.value}:${cfbPort.value}`
 }
 async function save() {
   await api.updateSettings(form)
