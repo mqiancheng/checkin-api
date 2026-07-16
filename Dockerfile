@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir -r requirements.txt
 # 下载 CloakBrowser 隐身 Chromium（CFBypass v2 端点需要；无网络时构建不阻断，运行时首次启动会自动拉取）
 RUN python -c "import cloakbrowser; cloakbrowser.ensure_binary()" || true
+# 下载 camoufox 内置 Firefox（camoufox 反检测模式需要；无网络时构建不阻断）
+RUN python -m camoufox fetch || true
 COPY app/ ./app/
 # 把构建好的前端静态文件拷进后端 static 目录，运行时由 FastAPI 托管
 COPY --from=frontend /app/static ./app/static
