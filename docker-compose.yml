@@ -1,0 +1,9 @@
+services:
+  checkin:
+    build: .
+    container_name: checkin-api
+    ports:
+      - "40000:40000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
