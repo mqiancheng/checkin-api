@@ -8,14 +8,6 @@ on:
         description: '镜像标签'
         required: false
         default: 'latest'
-      with_browser:
-        description: '包含浏览器支持（camoufox/Chrome 模式）？镜像会更大（+~1GB）'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
 
 permissions:
   contents: read
@@ -45,7 +37,5 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ github.event.inputs.tag }}
-          build-args: |
-            WITH_BROWSER=${{ github.event.inputs.with_browser }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
