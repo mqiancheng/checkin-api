@@ -48,6 +48,7 @@ class SettingsIn(BaseModel):
     wecom_webhook: str = ""
     timezone: str = "Asia/Shanghai"
     bypass_url: str = ""
+    chrome_path: str = ""
 
 
 @asynccontextmanager
@@ -177,6 +178,7 @@ def get_settings():
             "wecom_webhook": s.wecom_webhook,
             "timezone": s.timezone,
             "bypass_url": s.bypass_url,
+            "chrome_path": s.chrome_path,
         }
 
 
@@ -188,6 +190,7 @@ def update_settings(body: SettingsIn):
         s.wecom_webhook = body.wecom_webhook
         s.timezone = body.timezone
         s.bypass_url = body.bypass_url
+        s.chrome_path = body.chrome_path
         db.commit()
         scheduler.reload_all()
     return {"ok": True}

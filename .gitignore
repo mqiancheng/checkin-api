@@ -37,6 +37,9 @@ credentials.json
 # ---- 日志 ----
 *.log
 logs/
+# 本地手动测试时生成的服务日志（非项目文件）
+_server.err
+_server.log
 
 # ---- 测试文件 ----
 test_*.py

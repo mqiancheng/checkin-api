@@ -70,6 +70,7 @@ class Setting(Base):
     wecom_webhook = Column(Text, default="")
     timezone = Column(String(50), default="Asia/Shanghai")
     bypass_url = Column(Text, default="")  # NAS Cloudflare bypass 服务地址（留空则禁用 cf_bypass）
+    chrome_path = Column(Text, default="")  # chrome 模式使用的浏览器可执行文件路径（本地测试用）
 
 
 class BypassCache(Base):
