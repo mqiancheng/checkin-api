@@ -46,9 +46,6 @@ def _migrate_columns():
     if "bypass_url" not in setting_cols:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN bypass_url TEXT NOT NULL DEFAULT ''"))
-    if "chrome_path" not in setting_cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE settings ADD COLUMN chrome_path TEXT NOT NULL DEFAULT ''"))
 
 
 def init_db():

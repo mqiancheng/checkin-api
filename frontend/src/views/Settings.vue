@@ -19,6 +19,18 @@
           青龙侧用同名变量 <code>BYPASS_PASSWORD</code> 设置成相同值即可，例如 <code>BYPASS_PASSWORD=你的强密码</code>。
         </div>
       </el-form-item>
+      <el-form-item label="验证方式说明">
+        <div style="color:#888;font-size:12px;line-height:1.9;">
+          <p style="margin:0 0 6px;"><b>① 交互式验证（过 Turnstile 控件）</b></p>
+          适用于需要<b>登录账号、提交表单、点击按钮</b>才能完成的验证（如青龙脚本登录场景）。<br />
+          配置：任务 → 执行方式选 <code>浏览器内执行</code>，CloakBrowser 会在页面内自动点击 Turnstile 复选框并执行请求，无需手动处理 cf_clearance。<br />
+          外部调用（青龙）：<code>POST /&lt;密码&gt;/exec</code>
+          <p style="margin:10px 0 6px;"><b>② 获取 CF Cookies（cf_clearance）</b></p>
+          适用于<b>只需打开网站拿到 clearance 即可发送 API 请求</b>的场景（最常见）。<br />
+          配置：任务 → 执行方式保持 <code>HTTP</code>，CF Bypass 设为 <code>auto</code>（默认，被拦才调）或 <code>on</code>（强制每次刷新），系统自动获取并注入 cf_clearance。<br />
+          外部调用（青龙）：<code>GET /&lt;密码&gt;/cookies</code> 或 <code>/&lt;密码&gt;/turnstile</code>
+        </div>
+      </el-form-item>
       <el-divider>企业微信机器人通知</el-divider>
       <el-form-item label="启用通知">
         <el-switch v-model="form.wecom_enabled" />

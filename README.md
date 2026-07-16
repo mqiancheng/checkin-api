@@ -80,20 +80,28 @@ docker compose up -d
 
 值类型可选 `auto`(自动识别数字/字符串) / `str` / `num` / `bool`。
 
-## 应对 Cloudflare（两种执行方式）
+## 应对 Cloudflare（两种验证方式）
 
-任务可配置两种执行方式（编辑任务 → 「执行方式」下拉）：
+按「验证目标」分两类，对应不同的任务配置与外部调用方式：
 
-| 场景 | 执行方式 | CF Bypass |
-|------|----------|-----------|
-| 普通站点 | HTTP（默认） | auto（默认，被拦才调） |
-| 普通 JS 盾（freecloud 类） | HTTP | on / auto |
-| Managed Challenge（vikacg 类，clearance 绑浏览器指纹） | **浏览器内执行** | 不需要 |
+### ① 交互式验证（过 Turnstile 控件）
+**目标**：需要**登录账号、提交表单、点击按钮**才能完成的验证（例如青龙脚本登录场景、带 Turnstile 复选框的提交页）。
+- **任务配置**：执行方式选 `浏览器内执行`（CloakBrowser 在页面上下文内自动点击 Turnstile 复选框并执行 `fetch`，无需手动处理 `cf_clearance`）。
+- **外部调用（青龙）**：`POST /<密码>/exec`（在页面内执行请求，浏览器自己过盾）。
+- 适用：Managed Challenge 站点、需要交互的登录/签到流程。
 
-### 浏览器内执行（camoufox）
-- 用 camoufox 反检测 Firefox 在页面上下文内执行 API，等价于在 F12 Console 里敲 `fetch`；浏览器自己过 CF，无需手动处理 `cf_clearance`。
+### ② 获取 CF Cookies（cf_clearance）
+**目标**：只需**打开网站拿到 `cf_clearance` 即可发送 API 请求**的场景（最常见，普通 JS 盾站点）。
+- **任务配置**：执行方式保持 `HTTP`，CF Bypass 设为 `auto`（默认，被拦才调）或 `on`（强制每次刷新），系统自动获取并注入 `cf_clearance`。
+- **外部调用（青龙）**：`GET /<密码>/cookies` 或 `/<密码>/turnstile`（拿到 clearance 后注入自己的 HTTP 请求）。
+- 适用：freecloud 类普通 JS 盾、只需 cookie 就能调 API 的站点。
+
+> 一句话区分：**① 要"点一下/登录"的用浏览器内执行；② 只要"能打开网站拿 cookie"的用 CF Bypass。**
+
+### 浏览器内执行（CloakBrowser）
+- 由内置 CFBypass 端点的 CloakBrowser 隐身 Chromium 在页面上下文内执行 API，等价于在 F12 Console 里敲 `fetch`；浏览器自己过 CF（自动点 Turnstile），无需手动处理 `cf_clearance`。
 - RAW 中的 Cookie / Headers 会自动注入浏览器上下文。
-- 镜像已包含 Firefox 系统依赖，构建时会下载 camoufox 内置 Firefox（约 +150MB）。
+- 镜像已内置 CloakBrowser 隐身 Chromium（构建时自动下载，运行时首次启动也会自动拉取），无需系统 chromium / camoufox。
 
 ### CF Bypass（普通 JS 盾站点）
 

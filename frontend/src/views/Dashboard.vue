@@ -19,10 +19,10 @@
           <div style="font-size:13px; color:#666; word-break:break-all;">
             <div><b>方法:</b> {{ t.method }} <b>时间:</b> {{ scheduleText(t) }}</div>
             <div style="margin-top:4px; display:flex; gap:6px; flex-wrap:wrap;">
-              <el-tag size="small" :type="t.executor_type === 'browser' ? 'warning' : (t.executor_type === 'chrome' ? '' : 'info')">
-                {{ t.executor_type === 'browser' ? '浏览器' : (t.executor_type === 'chrome' ? 'Chrome' : 'HTTP') }}
+              <el-tag size="small" :type="(t.executor_type === 'browser' || t.executor_type === 'chrome' || t.executor_type === 'camoufox') ? 'warning' : 'info'">
+                {{ (t.executor_type === 'browser' || t.executor_type === 'chrome' || t.executor_type === 'camoufox') ? '浏览器' : 'HTTP' }}
               </el-tag>
-              <el-tag v-if="t.executor_type !== 'browser' && t.executor_type !== 'chrome' && t.cf_bypass !== 'auto'" size="small" type="success">
+              <el-tag v-if="t.executor_type === 'http' && t.cf_bypass !== 'auto'" size="small" type="success">
                 CF Bypass: {{ t.cf_bypass }}
               </el-tag>
             </div>
