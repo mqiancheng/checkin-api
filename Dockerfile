@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libappindicator3-1 libu2f-udev libvulkan1 libdrm2 xdg-utils xvfb \
     libcurl4 gnupg ca-certificates \
     libnspr4 libatk1.0-0 libpango-1.0-0 libcairo2 libatspi2.0-0 libxfixes3 \
+    libxt6 libpci3 libgl1 libxcb-shm0 \
     fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt

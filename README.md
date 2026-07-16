@@ -101,7 +101,7 @@ docker compose up -d
 ### 浏览器内执行（CloakBrowser）
 - 由内置 CFBypass 端点的 CloakBrowser 隐身 Chromium 在页面上下文内执行 API，等价于在 F12 Console 里敲 `fetch`；浏览器自己过 CF（自动点 Turnstile），无需手动处理 `cf_clearance`。
 - RAW 中的 Cookie / Headers 会自动注入浏览器上下文。
-- 镜像已内置 CloakBrowser 隐身 Chromium（构建时自动下载，运行时首次启动也会自动拉取），无需系统 chromium / camoufox。
+- 镜像已内置 CloakBrowser 隐身 Chromium（构建时自动下载，运行时首次启动也会自动拉取）。另含 camoufox 反检测 Firefox（构建时一并 `python -m camoufox fetch` 下载），供「浏览器内执行（camoufox）」执行方式使用。
 
 ### CF Bypass（普通 JS 盾站点）
 
